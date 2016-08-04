@@ -3,13 +3,20 @@
 import numpy as np
 import argparse
 import cv2
-
+global boxmax
+boxmax = -1
+global boxmin
+boxmin = 10000000
+global maximo 
+maximo = -1
+global minimo 
+minimo = 10000000000
 ##--------------------------------------------------------------##
-#	Función que permite aumentar o disminuir el brillo de 		 #
+#	Funcion que permite aumentar o disminuir el brillo de 		 #
 #	una imagen. La idea es poder usarlo para disminuir la  	 	 #
-#	luz que puede afectar la detección de los colores. 			 #
+#	luz que puede afectar la deteccion de los colores. 			 #
 #																 #
-#	Parámetros:												     #
+#	Parametros:												     #
 #		image: imagen a la que se le quiere modificar el brillo. #
 #		gamma: = 1 es la imagen original, > 1 aumenta el brillo, #
 #				< 1 lo disminuye. 								 #
@@ -27,17 +34,17 @@ def ajustarBrillo(image, gamma=1.0):
 
 
 ##--------------------------------------------------------------##
-#	Función utilizada para detectar la presencia de un color en  #
-#	una imagen. Para ser más precisos se utiliza un rango donde	 #
+#	Funcion utilizada para detectar la presencia de un color en  #
+#	una imagen. Para ser mas precisos se utiliza un rango donde	 #
 #	se encuentra el color buscado. 								 #
 #																 #
-#	Parámetros:												     #
-#		image: imagen donde se buscará el color.  				 #
-#		lower: color en HSV que corresponde al límite inferior   #
+#	Parametros:												     #
+#		image: imagen donde se buscara el color.  				 #
+#		lower: color en HSV que corresponde al limite inferior   #
 #				del rango del color buscado. 					 #
-#		upper: color en HSV que corresponde al límete superior	 #
+#		upper: color en HSV que corresponde al limite superior	 #
 #				del rango del color buscado. 					 #
-#	Retorna: la máscara resultante de la búsqueda del rango 	 #
+#	Retorna: la mascara resultante de la busqueda del rango 	 #
 #			 de colores en image,								 #
 ##--------------------------------------------------------------##
 def detectarColor(image, lower, upper):
@@ -48,43 +55,98 @@ def detectarColor(image, lower, upper):
 
 
 ##--------------------------------------------------------------##
-#	Función utilizada para detectar la presencia de un color en  #
-#	una imagen. Se descartarán aquellas figuras que tengan un    #
-#	área pequeña, porque corresponden a ruido u objetos no 		 # 
+#	Funcion utilizada para detectar la presencia de un color en  #
+#	una imagen. Se descartaran aquellas figuras que tengan un    #
+#	area pequena, porque corresponden a ruido u objetos no 		 # 
 #	deseados. 													 #
 #																 #
-#	Parámetros:												     #
-#		image: imagen donde se buscará el color.  				 #
-#		mascara: color en HSV que corresponde al límite inferior   #
+#	Parametros:												     #
+#		image: imagen donde se buscara el color.  				 #
+#		mascara: color en HSV que corresponde al limite inferior   #
 #				del rango del color buscado. 					 #
-#		error: color en HSV que corresponde al límete superior	 #
+#		error: color en HSV que corresponde al limete superior	 #
 #				del rango del color buscado. 					 #
-#	Retorna: la máscara resultante de la búsqueda del rango 	 #
+#	Retorna: la mascara resultante de la busqueda del rango 	 #
 #			 de colores en image,								 #
 ##--------------------------------------------------------------##
 def detectarForma(image, mascara,error):
-	##---- Encuentra los contornos en la máscara. CHAIN_APPROX_SIMPLE sirve para ahorrar memoria ----##
-	##---- porque te retorna solo los vértices de la figura. 									 ----##
+	##---- Encuentra los contornos en la mascara. CHAIN_APPROX_SIMPLE sirve para ahorrar memoria ----##
+	##---- porque te retorna solo los vertices de la figura. 									 ----##
 	im2, cnts, hierarchy = cv2.findContours(mascara, cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)	
 
 	##---- Recorremos los contornos encontrados ----##
 	for cnt in cnts:
-		peri = cv2.arcLength(cnt, True)					# Perímetro del contorno
+		peri = cv2.arcLength(cnt, True)					# Perimetro del contorno
 		aprox = cv2.approxPolyDP(cnt,error*peri,True) 	# Aproxima las curvas poligonales de un contorno
 		area = cv2.contourArea(cnt)
 		if area >= 1000:
 			print area
 			if 3<=len(aprox) <6:
-				cv2.drawContours(image,[cnt],0,(0,0,255),1)		# Dibuja el contorno encontado en la img original
+				cv2.drawContours(image,[cnt],0,(0,0,255),7)		# Dibuja el contorno encontado en la img original
 				return "Cuadrado"
 			elif 6<=len(aprox) :
-				cv2.drawContours(image,[cnt],0,(255,255,0),1)	
+				cv2.drawContours(image,[cnt],0,(255,255,0),7)	
 				return "Circulo"
-		
+
+def distance_to_camera(knownWidth, focalLength, perWidth):
+	return (knownWidth * focalLength) / perWidth
+
+
+def distancia(image,src, focalLength , kdist, kwidth):
+	global minimo
+	global maximo
+	global boxmin
+	global boxmax
+	#ref1 = cv2.cvtColor(image.copy(), cv2.COLOR_BGR2GRAY)
+	im2, contours, hierarchy = cv2.findContours(src.copy(),cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+	try:
+		c = max(contours, key = cv2.contourArea)
+	except:
+		return -1
+	marker = cv2.minAreaRect(c)
+	inches = distance_to_camera(kwidth, focalLength, marker[1][0])
+	box = np.int0(cv2.boxPoints(marker))
+	if inches < minimo:
+		minimo = inches
+		boxmin = box
+	elif inches > maximo:
+		maximo = inches
+		boxmax = box
+
+	if inches < 25:
+		cv2.drawContours(image, [box], -1, (0, 255, 0), 2)
+		cv2.putText(image, "%.2fcm" % (inches),
+		(image.shape[1] - 200, image.shape[0] - 20), cv2.FONT_HERSHEY_SIMPLEX,
+		2.0, (0, 255, 0), 3)
+	else:
+		cv2.drawContours(image, [box], -1, (0, 0, 255), 2)
+		cv2.putText(image, "%.2fcm" % (inches),
+		(image.shape[1] - 200, image.shape[0] - 20), cv2.FONT_HERSHEY_SIMPLEX,
+		2.0, (0, 0 , 255), 3)	
+	try:
+		cv2.drawContours(image, [boxmin], -1, (255, 0, 255), 2)
+		cv2.drawContours(image, [boxmax], -1, (0, 0,0), 2)
+	except: 
+		pass
+	return image.copy()
+
+def calibrarDist(ref, kdist, kwidth):
+	ref1 = cv2.cvtColor(ref.copy(), cv2.COLOR_BGR2GRAY)
+	ref1 = cv2.GaussianBlur(ref1, (5, 5), 0)
+	ref1 = cv2.Canny(ref1, 35, 125)
+	edged = cv2.Canny(ref, 35, 125)
+	im2, contours, hierarchy = cv2.findContours(edged,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+	c = max(contours, key = cv2.contourArea)
+	marker = cv2.minAreaRect(c)
+	focalLength = (marker[1][0] * kdist) / kwidth
+	#cv2.imshow("im2",im2)
+	return focalLength		
 
 ##---- Main function ----##
 if __name__ == "__main__":
-
+	"""
+	kDist = 24
+	kWidth = 6.5
 	cap = cv2.VideoCapture(1)
 	error = 0.0213
 
@@ -102,6 +164,37 @@ if __name__ == "__main__":
 		filtroForma = detectarForma(image2,filtroColor,error)
 		cv2.imshow("Image1", image1)
 		cv2.imshow("Image2", image2)	
+		if cv2.waitKey(1) & 0xFF == ord('q'):
+			break
+	"""
+	kernel = np.ones((5,5),np.uint8)
+	PATH = "latita.jpg"
+	refer = cv2.imread(PATH)
+	kDist = 24
+	kWidth = 6.5
+	cap = cv2.VideoCapture(1)
+	F = calibrarDist(refer,kDist,kWidth)
+	while(True):
+		error = 0.0220						#0.0213
+		# Leer la imagen
+		ret1, image = cap.read()
+		#image = image & mask_rbg
+		# Rango para la imagen.
+		lower = np.array([0, 0, 0])			# 0, 0, 0
+		upper = np.array([180, 255, 50])	# 180 255 50
+		image1 = ajustarBrillo(image,0.99)		# Ajustamos el brillo de la imagen
+		# Aplicamos el filtro de color que nos devuelve una mascara.
+		filtroColor = detectarColor(image1.copy(),lower,upper)
+		filtroCBlur = cv2.GaussianBlur(filtroColor, (23, 23), 0)
+		filtroCCan = cv2.Canny(filtroCBlur.copy(),0,255)
+		filtroCCan = cv2.morphologyEx(filtroCCan.copy(), cv2.MORPH_CLOSE, kernel)
+		filtroForma = detectarForma(filtroCCan,filtroColor.copy(),error)
+		distancia(image1,filtroCCan.copy(),F,kDist,kWidth)
+
+		cv2.imshow("blur", filtroCBlur)
+		cv2.imshow("filtroColor",filtroColor)
+		cv2.imshow("Original", image1)
+		cv2.imshow("Can", filtroCCan)
 		if cv2.waitKey(1) & 0xFF == ord('q'):
 			break
 
